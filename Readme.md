@@ -21,8 +21,8 @@ Reporters are a novel addition and essential for a decentralized infrastructure 
 ### Whitelisted Relays
 
 ---
-Relay ECDSA: Relay BLS Public Key: Relay API
-0x4b7D8790bE2000cCCDBa4b8Ef4F2f76A5ccd1427: 0x89daf9bf6113ec91fdbee11778ab1e1bb64f4ccc2532bdc2bb808c93a83946ac36bce00cf2496ce2b19a20f0030cd2bd: relayer.0xblockswap.com
+Relay ECDSA | Relay BLS Public Key| Relay API
+0x4b7D8790bE2000cCCDBa4b8Ef4F2f76A5ccd1427 | 0x89daf9bf6113ec91fdbee11778ab1e1bb64f4ccc2532bdc2bb808c93a83946ac36bce00cf2496ce2b19a20f0030cd2bd | relayer.0xblockswap.com
 id: pon
 ---
 
