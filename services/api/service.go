@@ -28,7 +28,6 @@ import (
 	"github.com/go-redis/redis/v9"
 	"github.com/gorilla/mux"
 	"github.com/sirupsen/logrus"
-	blst "github.com/supranational/blst/bindings/go"
 	uberatomic "go.uber.org/atomic"
 	"pon-relay.com/beaconclient"
 	"pon-relay.com/bls"
@@ -80,7 +79,8 @@ var (
 	apiIdleTimeoutMs       = cli.GetEnvInt("API_TIMEOUT_IDLE_MS", 3000)
 
 	// RPBS Endpoint
-	pathPublicKey = "/relay/v1/rpbs/public_key"
+	pathPublicKey      = "/relay/v1/rpbs/public_key"
+	pathSolveChallenge = "/relay/v1/rpbs/challenge"
 )
 
 // RelayAPIOpts contains the options for a relay
@@ -263,6 +263,7 @@ func (api *RelayAPI) getRouter() http.Handler {
 	if api.opts.RPBSAPI {
 		api.log.Info("RPBS enabled")
 		r.HandleFunc(pathPublicKey, api.handlePublicKey).Methods(http.MethodGet)
+		r.HandleFunc(pathSolveChallenge, api.handleSolveChallenge).Methods(http.MethodPost)
 	}
 
 	// r.Use(mux.CORSMethodMiddleware(r))
@@ -563,12 +564,6 @@ func (api *RelayAPI) handleGetHeader(w http.ResponseWriter, req *http.Request) {
 	}).Info("bid delivered")
 	api.RespondOK(w, bid)
 }
-
-type (
-	PublicKey     = blst.P1Affine
-	SecretKey     = blst.SecretKey
-	BLSTSignature = blst.P2Affine
-)
 
 func (api *RelayAPI) handleGetTestPayload(w http.ResponseWriter, req *http.Request) {
 	api.getPayloadCallsInFlight.Add(1)
@@ -1090,4 +1085,25 @@ func (api *RelayAPI) handlePublicKey(w http.ResponseWriter, req *http.Request) {
 		api.RespondError(w, http.StatusInternalServerError, err.Error())
 	}
 	api.RespondOK(w, &publicKey)
+}
+
+func (api *RelayAPI) handleSolveChallenge(w http.ResponseWriter, req *http.Request) {
+
+	log := api.log.WithFields(logrus.Fields{
+		"method":        "SolveChallenge",
+		"contentLength": req.ContentLength,
+	})
+
+	challenge := new(common.RPBSChallenge)
+	if err := json.NewDecoder(req.Body).Decode(&challenge); err != nil {
+		log.WithError(err).Warn("could not decode payload")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	solution, err := api.RPBS.SolveChallenge(*challenge)
+	if err != nil {
+		api.RespondError(w, http.StatusInternalServerError, err.Error())
+	}
+	api.RespondOK(w, &solution)
 }
