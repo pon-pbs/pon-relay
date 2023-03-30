@@ -6,8 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
-	"net/url"
-	"strings"
 	"time"
 
 	api "github.com/attestantio/go-builder-client/api"
@@ -32,6 +30,8 @@ var (
 	ErrUnknownNetwork = errors.New("unknown network")
 	ErrEmptyPayload   = errors.New("empty payload")
 )
+
+var ZeroU256 = &uint256.Int{0}
 
 type EcdsaSignature [65]byte
 
@@ -70,7 +70,6 @@ func (s *EcdsaSignature) FromSlice(x []byte) error {
 	return nil
 }
 
-type Address [20]byte
 type PubkeyHex string
 
 type PublicKey [48]byte
@@ -393,13 +392,7 @@ type GetPayloadHeaderResponse struct {
 	API     string                          `json:"api"`
 }
 
-// BuilderEntry represents a builder that is allowed to send blocks
-// Address will be schema://hostname:port
-type BuilderEntry struct {
-	Address string
-	Pubkey  hexutil.Bytes
-	URL     *url.URL
-}
+type Address [20]byte
 
 // Functions for Builder Wallet
 func (a Address) MarshalText() ([]byte, error) {
@@ -408,8 +401,6 @@ func (a Address) MarshalText() ([]byte, error) {
 func (n *U256Str) BigInt() *big.Int {
 	return new(big.Int).SetBytes(reverse(n[:]))
 }
-
-var ZeroU256 = &uint256.Int{0}
 
 func (n *U256Str) Cmp(b *U256Str) int {
 	_a := n.BigInt()
@@ -526,31 +517,6 @@ func (s *SignedBlindedBeaconBlock) Message() boostTypes.HashTreeRoot {
 	return nil
 }
 
-// NewBuilderEntry creates a new instance based on an input string
-// builderURL can be IP@PORT, PUBKEY@IP:PORT, https://IP, etc.
-func NewBuilderEntry(builderURL string) (entry *BuilderEntry, err error) {
-	if !strings.HasPrefix(builderURL, "http") {
-		builderURL = "http://" + builderURL
-	}
-
-	parsedURL, err := url.Parse(builderURL)
-	if err != nil {
-		return nil, err
-	}
-
-	var pubkey hexutil.Bytes
-	err = pubkey.UnmarshalText([]byte(entry.URL.User.Username()))
-	if err != nil {
-		return nil, err
-	}
-
-	return &BuilderEntry{
-		URL:     parsedURL,
-		Address: parsedURL.Scheme + "://" + parsedURL.Host,
-		Pubkey:  pubkey,
-	}, nil
-}
-
 type EthNetworkDetails struct {
 	Name                     string
 	GenesisForkVersionHex    string
@@ -564,22 +530,16 @@ type EthNetworkDetails struct {
 }
 
 var (
-	EthNetworkKiln     = "kiln"
-	EthNetworkRopsten  = "ropsten"
-	EthNetworkSepolia  = "sepolia"
-	EthNetworkGoerli   = "goerli"
-	EthNetworkMainnet  = "mainnet"
-	EthNetworkZhejiang = "zhejiang"
+	EthNetworkKiln    = "kiln"
+	EthNetworkRopsten = "ropsten"
+	EthNetworkSepolia = "sepolia"
+	EthNetworkGoerli  = "goerli"
+	EthNetworkMainnet = "mainnet"
 
 	CapellaForkVersionRopsten = "0x03001020"
 	CapellaForkVersionSepolia = "0x90000072"
 	CapellaForkVersionGoerli  = "0x03001020"
 	CapellaForkVersionMainnet = "0x03000000"
-
-	// Zhejiang details
-	GenesisForkVersionZhejiang    = "0x00000069"
-	GenesisValidatorsRootZhejiang = "0x53a92d8f2bb1d85f62d16a156e6ebcd1bcaba652d0900b2c2f387826f3481f6f"
-	BellatrixForkVersionZhejiang  = "0x00000071"
 )
 
 func NewEthNetworkDetails(networkName string) (ret *EthNetworkDetails, err error) {
@@ -798,10 +758,17 @@ func (n *U256Str) FromBig(x *big.Int) error {
 }
 
 type RpbsCommitResponse map[string]string
+type RpbsChallengeResponse map[string]string
+type RpbsSolution map[string]string
 
 type RpbsCommitMessage struct {
 	BuilderWalletAddress *Address `json:"builderWalletAddress"`
 	Slot                 uint64   `json:"slot"`
 	Amount               uint64   `json:"amount"`
 	TxBytes              string   `json:"txBytes"`
+}
+
+type RPBSChallenge struct {
+	Commitment RpbsCommitResponse    `json:"commitment"`
+	Challenge  RpbsChallengeResponse `json:"challenge"`
 }

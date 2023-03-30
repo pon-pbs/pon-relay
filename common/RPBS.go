@@ -122,3 +122,52 @@ func (r *RPBSService) PublicKey() (string, error) {
 	}
 	return response, nil
 }
+
+func (r *RPBSService) SolveChallenge(challenge RPBSChallenge) (*RpbsSolution, error) {
+
+	url := r.endpoint + "/solveChallenge"
+
+	log.Info("RPBS Challenge", "url", url)
+
+	challengeBytes, err := json.Marshal(challenge)
+	if err != nil {
+		log.Error("Marshal Challenge Failed", "err", err)
+		return nil, err
+	}
+
+	req, err := http.NewRequest("POST", url, bytes.NewReader(challengeBytes))
+	if err != nil {
+		log.Error("invalid request", "url", url, "err", err)
+		return nil, err
+	}
+
+	req.Header.Set("accept", "application/json")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("X-API-Key", r.apiKey)
+
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		log.Error("client refused", "url", url, "err", err)
+		return nil, err
+	}
+
+	defer resp.Body.Close()
+
+	if resp.StatusCode != 200 {
+		bodyBytes, err := io.ReadAll(resp.Body)
+		if err != nil {
+			log.Error("could not read response body", "url", url, "err", err)
+			return nil, err
+		}
+		log.Error("invalid response", "url", url, "status", resp.StatusCode, "body", string(bodyBytes))
+		return nil, errors.New("invalid response")
+	}
+
+	response := new(RpbsSolution)
+	err = json.NewDecoder(resp.Body).Decode(&response)
+	if err != nil {
+		log.Error("could not decode response", "url", url, "err", err)
+		return nil, err
+	}
+	return response, nil
+}
