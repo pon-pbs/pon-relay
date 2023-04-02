@@ -27,3 +27,7 @@ Reporters are a novel addition and essential for a decentralized infrastructure 
 ### Getting Your Relay Whitelisted
 
 Make a PR that adds your details to whitelisted relay table and we will approve your relay and add to the payout pool.
+
+
+#### Credits-
+PON-PBS is built on top of existing MEV Supply infrastructure taking [Flashbots MEV Boost Relay](https://github.com/flashbots/mev-boost-relay) as Base. PON-PBS is targeted towards hiding transaction contents from Relay using Restrictive Partially Blind Signature and hence continues to use utilities like Beacon Client Interface, Housekeeper API Interface etc. from Flashbots Relay. PON-PBS also uses the same types to make sure it is compatible with existing MEV Boost Implementation (This has been done to make sure proposers don't need to change anything). PON-PBS implements everything that is needed to keep the transactions private, maintain the Proof of Neutrality flow as well as everything needed on Relay's part to implement Restrictive Partially Blind Signature Mechanism.
