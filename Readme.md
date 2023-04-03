@@ -27,3 +27,12 @@ Reporters are a novel addition and essential for a decentralized infrastructure 
 ### Getting Your Relay Whitelisted
 
 Make a PR that adds your details to whitelisted relay table and we will approve your relay and add to the payout pool.
+
+
+#### Credits-
+PoN Relay is built on top of the existing MEV Supply infrastructure and utilizes the [Flashbots MEV Boost](https://github.com/flashbots/mev-boost-relay) Relay as an initial base to ensure MEV Boost compatibility. PoN relay is targeted towards hiding transaction contents from the relayer using Restrictive Partially Blind Signature (RPBS) and hence continues to use utilities like -
+* Beacon Client Interface
+* Housekeeper Service
+* API Interface
+
+PoN relayer has pre-existing common files that interact with MEV-boost for compatibility reasons (This is to ensure that the PoN Relay is accessible for all proposers on Ethereum). PoN Relay implements an encrypted mempool transaction model between Builder-Relayer and Proposers, maintaining the Proof of Neutrality flow while ensuring that the Builders have a fair marketplace with auction mechanism and proposers receive the maximum MEV payouts automatically. To be sure neither PoN Relay or proposer will have visibility to transaction contents, only builder has visibility to those until it is published on Ethereum.
