@@ -1,4 +1,3 @@
-// Package api contains the API webserver for the proposer and block-builder APIs
 package api
 
 import (
@@ -81,6 +80,10 @@ var (
 	// RPBS Endpoint
 	pathPublicKey      = "/relay/v1/rpbs/public_key"
 	pathSolveChallenge = "/relay/v1/rpbs/challenge"
+
+	pathReporterBlocks              = "/relay/v1/reporter/blocks"
+	pathReporterGetHeaders          = "/relay/v1/reporter/get_headers"
+	pathReporterBlindedBeaconBlocks = "/relay/v1/reporter/blinded_beacon_blocks"
 )
 
 // RelayAPIOpts contains the options for a relay
@@ -265,6 +268,11 @@ func (api *RelayAPI) getRouter() http.Handler {
 		r.HandleFunc(pathPublicKey, api.handlePublicKey).Methods(http.MethodGet)
 		r.HandleFunc(pathSolveChallenge, api.handleSolveChallenge).Methods(http.MethodPost)
 	}
+
+	api.log.Info("Reporter API enabled")
+	r.HandleFunc(pathReporterBlocks, api.handleGetBlockSubmissionsReporter).Methods(http.MethodPost)
+	r.HandleFunc(pathReporterGetHeaders, api.handleGetHeaderDeliveredReporter).Methods(http.MethodPost)
+	r.HandleFunc(pathReporterBlindedBeaconBlocks, api.handleBlindedBeaconBlockReporter).Methods(http.MethodPost)
 
 	// r.Use(mux.CORSMethodMiddleware(r))
 	loggedRouter := httplogger.LoggingMiddlewareLogrus(api.log, r)
@@ -552,9 +560,15 @@ func (api *RelayAPI) handleGetHeader(w http.ResponseWriter, req *http.Request) {
 		return
 	}
 
-	// Error on bid without value
 	if bid.Data.Message.Value.Cmp(common.ZeroU256) == 0 {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+
+	errors := api.db.SaveGetHeaderDelivered(&common.GetPayloadHeaderDelivered{Slot: slot, ProposerPubkeyHex: proposerPubkeyHex, Value: *bid.Data.Message.Value.ToBig()})
+	if errors != nil {
+		log.WithError(err).Error("could not save to Database")
+		api.RespondError(w, http.StatusBadRequest, errors.Error())
 		return
 	}
 
@@ -620,6 +634,12 @@ func (api *RelayAPI) handleGetTestPayload(w http.ResponseWriter, req *http.Reque
 		fmt.Println("Signature Failed")
 	}
 	fmt.Println("Signature Verified")
+	err = api.db.SaveBlindedBeaconBlock(payload, proposerPubkey.String())
+	if err != nil {
+		log.Fatalf("An Error Occured %v", err)
+		api.RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
 	blockHash := payload.BlockHash()
 	blockSubmission, err := api.datastore.GetGetPayloadHeaderResponse(slot, proposerPubkey.String(), blockHash)
 	if err != nil || blockSubmission == nil {
@@ -674,6 +694,12 @@ func (api *RelayAPI) handleGetTestPayload(w http.ResponseWriter, req *http.Reque
 	if errs != nil {
 		log.WithError(errs).Error("Couldn't Set Payload Delivered Slot")
 	}
+	defer func() {
+		err = api.db.SavePayload(&PayloadResponse, slot, proposerPubkey.String())
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	api.RespondOK(w, &PayloadResponse)
 	log = log.WithFields(logrus.Fields{
@@ -763,6 +789,13 @@ func (api *RelayAPI) handleGetPayload(w http.ResponseWriter, req *http.Request) 
 		}
 	}
 
+	err = api.db.SaveBlindedBeaconBlock(payload, proposerPubkey.String())
+	if err != nil {
+		log.Fatalf("An Error Occured %v", err)
+		api.RespondError(w, http.StatusInternalServerError, err.Error())
+		return
+	}
+
 	postBody, _ := json.Marshal(payload.Capella)
 	resp, err := http.Post(blockSubmission.API, "application/json", bytes.NewReader(postBody))
 	if err != nil {
@@ -795,6 +828,13 @@ func (api *RelayAPI) handleGetPayload(w http.ResponseWriter, req *http.Request) 
 	if errs != nil {
 		log.WithError(errs).Error("Couldn't Set Payload Delivered Slot")
 	}
+
+	defer func() {
+		err = api.db.SavePayload(&PayloadResponse, slot, proposerPubkey.String())
+		if err != nil {
+			fmt.Println(err)
+		}
+	}()
 
 	api.RespondOK(w, &PayloadResponse)
 	log = log.WithFields(logrus.Fields{
@@ -878,6 +918,16 @@ func (api *RelayAPI) handleSubmitNewBlock(w http.ResponseWriter, req *http.Reque
 		"builderPubkey": payload.Message.BuilderPubkey.String(),
 		"blockHash":     payload.Message.BlockHash.String(),
 	})
+
+	status, err := api.redis.GetBlockBuilderStatus(payload.BuilderWalletAddress.String())
+	if err != nil {
+		api.RespondError(w, http.StatusBadRequest, "Failed To Get Builder")
+		return
+	}
+	if !status {
+		api.RespondError(w, http.StatusBadRequest, "Builder Not Active In PON")
+		return
+	}
 
 	// Timestamp check
 	expectedTimestamp := api.genesisInfo.Data.GenesisTime + (payload.Message.Slot * 12)
@@ -1106,4 +1156,76 @@ func (api *RelayAPI) handleSolveChallenge(w http.ResponseWriter, req *http.Reque
 		api.RespondError(w, http.StatusInternalServerError, err.Error())
 	}
 	api.RespondOK(w, &solution)
+}
+
+func (api *RelayAPI) handleGetBlockSubmissionsReporter(w http.ResponseWriter, req *http.Request) {
+	log := api.log.WithFields(logrus.Fields{
+		"method":        "Reporter Block Submissions",
+		"contentLength": req.ContentLength,
+	})
+
+	slotLimit := new(common.ReporterSlot)
+	if err := json.NewDecoder(req.Body).Decode(&slotLimit); err != nil {
+		log.WithError(err).Warn("could not decode payload")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	blockSubmissions, err := api.db.GetBlockSubmissionReporter(slotLimit.SlotLower, slotLimit.SlotUpper)
+	if err != nil {
+		log.WithError(err).Warn("Failed Block Request Reporter")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	api.RespondOK(w, &blockSubmissions)
+
+}
+
+func (api *RelayAPI) handleGetHeaderDeliveredReporter(w http.ResponseWriter, req *http.Request) {
+	log := api.log.WithFields(logrus.Fields{
+		"method":        "Reporter Get Header Delivered",
+		"contentLength": req.ContentLength,
+	})
+
+	slotLimit := new(common.ReporterSlot)
+	if err := json.NewDecoder(req.Body).Decode(&slotLimit); err != nil {
+		log.WithError(err).Warn("could not decode payload")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	GetHeaderDelivered, err := api.db.GetGetHeadersDeliveredReporter(slotLimit.SlotLower, slotLimit.SlotUpper)
+	if err != nil {
+		log.WithError(err).Warn("Failed Get Header Reporter")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	api.RespondOK(w, &GetHeaderDelivered)
+
+}
+
+func (api *RelayAPI) handleBlindedBeaconBlockReporter(w http.ResponseWriter, req *http.Request) {
+	log := api.log.WithFields(logrus.Fields{
+		"method":        "Reporter Blinded Beacon Block",
+		"contentLength": req.ContentLength,
+	})
+
+	slotLimit := new(common.ReporterSlot)
+	if err := json.NewDecoder(req.Body).Decode(&slotLimit); err != nil {
+		log.WithError(err).Warn("could not decode payload")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	BlindedBeaconBlock, err := api.db.GetBlindedBeaconBlockReporter(slotLimit.SlotLower, slotLimit.SlotUpper)
+	if err != nil {
+		log.WithError(err).Warn("Failed Get Header Reporter")
+		api.RespondError(w, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	api.RespondOK(w, &BlindedBeaconBlock)
+
 }

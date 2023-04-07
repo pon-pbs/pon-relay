@@ -19,11 +19,9 @@ import (
 )
 
 var (
-	apiDefaultListenAddr = common.GetEnv("LISTEN_ADDR", "localhost:9062")
-	apiDefaultBlockSim   = common.GetEnv("BLOCKSIM_URI", "http://localhost:8545")
-	apiDefaultSecretKey  = common.GetEnv("SECRET_KEY", "")
-	apiDefaultLogTag     = os.Getenv("LOG_TAG")
-
+	apiDefaultListenAddr         = common.GetEnv("LISTEN_ADDR", "localhost:9062")
+	apiDefaultSecretKey          = common.GetEnv("SECRET_KEY", "")
+	apiDefaultLogTag             = os.Getenv("LOG_TAG")
 	apiDefaultPprofEnabled       = os.Getenv("PPROF") == "1"
 	apiDefaultInternalAPIEnabled = os.Getenv("ENABLE_INTERNAL_API") == "1"
 
@@ -48,7 +46,6 @@ func init() {
 	apiCmd.Flags().StringVar(&redisURI, "redis-uri", defaultRedisURI, "redis uri")
 	apiCmd.Flags().StringVar(&postgresDSN, "db", defaultPostgresDSN, "PostgreSQL DSN")
 	apiCmd.Flags().StringVar(&apiSecretKey, "secret-key", apiDefaultSecretKey, "secret key for signing bids")
-	apiCmd.Flags().StringVar(&apiBlockSimURL, "blocksim", apiDefaultBlockSim, "URL for block simulator")
 	apiCmd.Flags().StringVar(&network, "network", defaultNetwork, "Which network to use")
 
 	apiCmd.Flags().BoolVar(&apiPprofEnabled, "pprof", apiDefaultPprofEnabled, "enable pprof API")

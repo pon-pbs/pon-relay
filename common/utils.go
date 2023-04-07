@@ -4,17 +4,11 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"net/http"
 	"os"
 	"strings"
-)
-
-var (
-	ErrInvalidForkVersion = errors.New("invalid fork version")
-	ErrHTTPErrorResponse  = errors.New("got an HTTP error response")
 )
 
 func makeRequest(ctx context.Context, client http.Client, method, url string, payload any) (*http.Response, error) {

@@ -2,7 +2,6 @@
 package datastore
 
 import (
-	"encoding/json"
 	"strings"
 	"sync"
 
@@ -111,49 +110,30 @@ func (ds *Datastore) SaveValidatorRegistration(entry types.SignedValidatorRegist
 	return nil
 }
 
-// GetGetPayloadResponse returns the getPayload response from memory or Redis or Database
+// GetGetPayloadResponse returns the getPayload response from Redis
 func (ds *Datastore) GetGetPayloadResponse(slot uint64, proposerPubkey, blockHash string) (*types.GetPayloadResponse, error) {
 	_proposerPubkey := strings.ToLower(proposerPubkey)
 	_blockHash := strings.ToLower(blockHash)
 
-	// 1. try to get from Redis
 	resp, err := ds.redis.GetExecutionPayload(slot, _proposerPubkey, _blockHash)
 	if err != nil {
 		ds.log.WithError(err).Error("error getting getPayload response from redis")
-	} else {
-		ds.log.Debug("getPayload response from redis")
-		return resp, nil
+		return resp, err
 	}
 
-	// 2. try to get from database
-	blockSubEntry, err := ds.db.GetExecutionPayloadEntryBySlotPkHash(slot, proposerPubkey, blockHash)
-	if err != nil {
-		return nil, err
-	}
-
-	// deserialize execution payload
-	executionPayload := new(types.ExecutionPayload)
-	err = json.Unmarshal([]byte(blockSubEntry.Payload), executionPayload)
-	if err != nil {
-		return nil, err
-	}
-
-	ds.log.Debug("getPayload response from database")
-	return &types.GetPayloadResponse{
-		Version: types.VersionString(blockSubEntry.Version),
-		Data:    executionPayload,
-	}, nil
+	ds.log.Debug("getPayload response from redis")
+	return resp, nil
 }
 
-// GetGetPayloadResponse returns the getPayload response from memory or Redis or Database
+// GetGetPayloadHeaderResponse returns the getHeader response from Redis
 func (ds *Datastore) GetGetPayloadHeaderResponse(slot uint64, proposerPubkey, blockHash string) (*relayCommon.GetPayloadHeaderResponse, error) {
 	_proposerPubkey := strings.ToLower(proposerPubkey)
 	_blockHash := strings.ToLower(blockHash)
 
-	// 1. try to get from Redis
 	resp, err := ds.redis.GetExecutionPayloadHeader(slot, _proposerPubkey, _blockHash)
 	if err != nil {
 		ds.log.WithError(err).Error("error getting getPayload response from redis")
+		return resp, err
 	}
 	ds.log.Debug("getPayload response from redis")
 	return resp, nil

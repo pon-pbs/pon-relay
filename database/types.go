@@ -123,6 +123,36 @@ func (e *ExecutionPayloadEntry) ToCSVRecord() []string {
 	}
 }
 
+type BuilderBlockSubmissionReporter struct {
+	Slot           uint64 `db:"slot"`
+	BuilderPubkey  string `db:"builder_pubkey"`
+	ProposerPubkey string `db:"proposer_pubkey"`
+	Value          string `db:"value"`
+	RPBS           string `db:"rpbs"`
+	Transaction    string `db:"transactionbytestring"`
+}
+
+type GetHeaderResponseReporter struct {
+	Slot           uint64 `db:"slot"`
+	ProposerPubkey string `db:"proposer_pubkey"`
+	Value          string `db:"value"`
+}
+
+type GetBlindedBeaconBlockReporter struct {
+	Slot           uint64 `db:"slot"`
+	BlockHash      string `db:"block_hash"`
+	Signature      string `db:"signature"`
+	ProposerPubkey string `db:"proposer"`
+}
+
+type GetHeaderDeliveredEntry struct {
+	ID             int64     `db:"id"`
+	InsertedAt     time.Time `db:"inserted_at"`
+	Slot           uint64    `db:"slot"`
+	ProposerPubkey string    `db:"proposer_pubkey"`
+	Value          string    `db:"value"`
+}
+
 type BuilderBlockSubmissionEntry struct {
 	ID         int64        `db:"id"`
 	InsertedAt time.Time    `db:"inserted_at"`
@@ -131,7 +161,9 @@ type BuilderBlockSubmissionEntry struct {
 	// BidTrace data
 	Signature string `db:"signature"`
 
-	Slot uint64 `db:"slot"`
+	Slot       uint64 `db:"slot"`
+	ParentHash string `db:"parent_hash"`
+	BlockHash  string `db:"block_hash"`
 
 	BuilderPubkey  string `db:"builder_pubkey"`
 	ProposerPubkey string `db:"proposer_pubkey"`
@@ -139,19 +171,20 @@ type BuilderBlockSubmissionEntry struct {
 	Value string `db:"value"`
 
 	// Helpers
-	Epoch uint64 `db:"epoch"`
+	Epoch       uint64 `db:"epoch"`
+	BlockNumber uint64 `db:"block_number"`
+
+	RPBS                  string `db:"rpbs"`
+	TransactionByteString string `db:"transactionByteString"`
 }
 
 type DeliveredPayloadEntry struct {
 	ID         int64     `db:"id"`
 	InsertedAt time.Time `db:"inserted_at"`
 
-	SignedBlindedBeaconBlock sql.NullString `db:"signed_blinded_beacon_block"`
-
 	Slot  uint64 `db:"slot"`
 	Epoch uint64 `db:"epoch"`
 
-	BuilderPubkey        string `db:"builder_pubkey"`
 	ProposerPubkey       string `db:"proposer_pubkey"`
 	ProposerFeeRecipient string `db:"proposer_fee_recipient"`
 
@@ -161,8 +194,6 @@ type DeliveredPayloadEntry struct {
 
 	GasUsed  uint64 `db:"gas_used"`
 	GasLimit uint64 `db:"gas_limit"`
-
-	Value string `db:"value"`
 }
 
 type BlockBuilderEntry struct {
@@ -182,4 +213,15 @@ type BlockBuilderEntry struct {
 	NumSubmissionsSimError uint64 `db:"num_submissions_simerror" json:"num_submissions_simerror"`
 
 	NumSentGetPayload uint64 `db:"num_sent_getpayload" json:"num_sent_getpayload"`
+}
+
+type BlindedBeaconBlockEntry struct {
+	ID         int64     `db:"id"          json:"id"`
+	InsertedAt time.Time `db:"inserted_at" json:"inserted_at"`
+
+	Signature string `db:"signature" json:"signature"`
+	Slot      uint64 `db:"slot"    json:"slot"`
+
+	Proposer  string `db:"proposer"   json:"proposer"`
+	BlockHash string `db:"block_hash" json:"block_hash"`
 }

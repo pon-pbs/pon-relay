@@ -1,10 +1,3 @@
-// Package housekeeper contains the service doing all required regular tasks
-//
-// - Update known validators
-// - Updating proposer duties
-// - Saving metrics
-// - Deleting old bids
-// - ...
 package housekeeper
 
 import (
@@ -21,6 +14,7 @@ import (
 	"pon-relay.com/common"
 	"pon-relay.com/database"
 	"pon-relay.com/datastore"
+	"pon-relay.com/ponPool"
 )
 
 type HousekeeperOpts struct {
@@ -28,6 +22,7 @@ type HousekeeperOpts struct {
 	Redis        *datastore.RedisCache
 	DB           *database.DatabaseService
 	BeaconClient beaconclient.IMultiBeaconClient
+	PonPool      *ponPool.PonRegistrySubgraph
 }
 
 type Housekeeper struct {
@@ -45,6 +40,8 @@ type Housekeeper struct {
 	headSlot uberatomic.Uint64
 
 	proposersAlreadySaved map[string]bool // to avoid repeating redis writes
+
+	ponPool *ponPool.PonRegistrySubgraph
 }
 
 var ErrServerAlreadyStarted = errors.New("server was already started")
@@ -57,6 +54,7 @@ func NewHousekeeper(opts *HousekeeperOpts) *Housekeeper {
 		db:                    opts.DB,
 		beaconClient:          opts.BeaconClient,
 		proposersAlreadySaved: make(map[string]bool),
+		ponPool:               opts.PonPool,
 	}
 
 	return server
@@ -75,14 +73,12 @@ func (hk *Housekeeper) Start() (err error) {
 		return err
 	}
 
-	// Start initial tasks
-	go hk.updateBlockBuildersInRedis()
 	go hk.updateValidatorRegistrationsInRedis()
 
 	// Start the periodic task loops
 	go hk.periodicTaskUpdateKnownValidators()
-	go hk.periodicTaskLogValidators()
-	go hk.periodicTaskUpdateBuilderStatusInRedis()
+	go hk.periodicTaskLogValidatorsBuilders()
+	go hk.periodicTaskUpdateBuilder()
 
 	// Process the current slot
 	headSlot := bestSyncStatus.HeadSlot
@@ -97,7 +93,7 @@ func (hk *Housekeeper) Start() (err error) {
 	}
 }
 
-func (hk *Housekeeper) periodicTaskLogValidators() {
+func (hk *Housekeeper) periodicTaskLogValidatorsBuilders() {
 	for {
 		numRegisteredValidators, err := hk.db.NumRegisteredValidators()
 		if err == nil {
@@ -112,6 +108,12 @@ func (hk *Housekeeper) periodicTaskLogValidators() {
 		} else {
 			hk.log.WithError(err).Error("failed to get number of active validators")
 		}
+
+		numRegisteredBuilders, err := hk.db.NumBuilders()
+		if err != nil {
+			hk.log.WithError(err).Error("failed to get number of active builders")
+		}
+		hk.log.WithField("numActiveBuilders", numRegisteredBuilders).Infof("PON builders: %d", numRegisteredBuilders)
 
 		time.Sleep(common.DurationPerEpoch / 2)
 	}
@@ -128,10 +130,10 @@ func (hk *Housekeeper) periodicTaskUpdateKnownValidators() {
 	}
 }
 
-func (hk *Housekeeper) periodicTaskUpdateBuilderStatusInRedis() {
+func (hk *Housekeeper) periodicTaskUpdateBuilder() {
 	for {
-		// builders, err := hk.da
-		time.Sleep(common.DurationPerEpoch / 2)
+		hk.updateBlockBuilders()
+		time.Sleep(common.DurationPerEpoch)
 	}
 }
 
@@ -329,20 +331,23 @@ func (hk *Housekeeper) updateValidatorRegistrationsInRedis() {
 	hk.log.Infof("updating %d validator registrations in Redis done - %f sec", len(regs), time.Since(timeStarted).Seconds())
 }
 
-func (hk *Housekeeper) updateBlockBuildersInRedis() {
-	builders, err := hk.db.GetBlockBuilders()
+func (hk *Housekeeper) updateBlockBuilders() {
+	builders, err := hk.ponPool.GetBuilders()
 	if err != nil {
-		hk.log.WithError(err).Error("failed to get block builders from db")
+		hk.log.WithError(err).Error("Failed To Get Builders")
 		return
 	}
 
-	hk.log.Infof("updating %d block builders in Redis...", len(builders))
+	hk.log.Infof("Updating %d block builders in Redis...", len(builders))
 	for _, builder := range builders {
-		status := datastore.MakeBlockBuilderStatus(builder.IsHighPrio, builder.IsBlacklisted)
-		hk.log.Infof("updating block builder in Redis: %s - %s", builder.BuilderPubkey, status)
-		err = hk.redis.SetBlockBuilderStatus(builder.BuilderPubkey, status)
+		err = hk.redis.SetBlockBuilderStatus(builder.BuilderPubkey, builder.Status)
 		if err != nil {
 			hk.log.WithError(err).Error("failed to set block builder status in redis")
 		}
+	}
+	hk.log.Infof("Updating %d block builders in Database...", len(builders))
+	err = hk.db.SaveBuilder(builders)
+	if err != nil {
+		hk.log.WithError(err).Error("failed to save block builders")
 	}
 }

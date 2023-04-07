@@ -7,8 +7,6 @@ import (
 	blst "github.com/supranational/blst/bindings/go"
 )
 
-// From https://github.com/supranational/blst/tree/master/bindings/go
-
 var dst = []byte("BLS_SIG_BLS12381G2_XMD:SHA-256_SSWU_RO_POP_")
 
 const (
@@ -119,4 +117,3 @@ func VerifySignatureBytes(msg, sigBytes, pkBytes []byte) (bool, error) {
 	}
 	return VerifySignature(sig, pubkey, msg[:]), nil
 }
-

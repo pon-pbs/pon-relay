@@ -9,6 +9,7 @@ import (
 	"pon-relay.com/common"
 	"pon-relay.com/database"
 	"pon-relay.com/datastore"
+	"pon-relay.com/ponPool"
 	"pon-relay.com/services/housekeeper"
 )
 
@@ -20,6 +21,7 @@ func init() {
 	housekeeperCmd.Flags().StringSliceVar(&beaconNodeURIs, "beacon-uris", defaultBeaconURIs, "beacon endpoints")
 	housekeeperCmd.Flags().StringVar(&redisURI, "redis-uri", defaultRedisURI, "redis uri")
 	housekeeperCmd.Flags().StringVar(&postgresDSN, "db", defaultPostgresDSN, "PostgreSQL DSN")
+	housekeeperCmd.Flags().StringVar(&ponSubgraph, "pon-pool", defaultPostgresDSN, "PON Registry Subgraph URL")
 
 	housekeeperCmd.Flags().StringVar(&network, "network", defaultNetwork, "Which network to use")
 }
@@ -66,12 +68,14 @@ var housekeeperCmd = &cobra.Command{
 		if err != nil {
 			log.WithError(err).Fatalf("Failed to connect to Postgres database at %s%s", dbURL.Host, dbURL.Path)
 		}
+		ponPool := ponPool.NewPonPool(ponSubgraph, " ")
 
 		opts := &housekeeper.HousekeeperOpts{
 			Log:          log,
 			Redis:        redis,
 			DB:           db,
 			BeaconClient: beaconClient,
+			PonPool:      ponPool,
 		}
 		service := housekeeper.NewHousekeeper(opts)
 		log.Info("Starting housekeeper service...")

@@ -8,10 +8,9 @@ import (
 
 var (
 	ErrServerAlreadyRunning = errors.New("server already running")
-
-	SlotsPerEpoch    = 32
-	DurationPerSlot  = time.Second * 12
-	DurationPerEpoch = DurationPerSlot * time.Duration(SlotsPerEpoch)
+	SlotsPerEpoch           = 32
+	DurationPerSlot         = time.Second * 12
+	DurationPerEpoch        = DurationPerSlot * time.Duration(SlotsPerEpoch)
 )
 
 // HTTPServerTimeouts are various timeouts for requests to the mev-boost HTTP server
@@ -22,10 +21,7 @@ type HTTPServerTimeouts struct {
 	Idle       time.Duration // Timeout to disconnect idle client connections. None if 0.
 }
 
-
 const (
-	DepositContractTreeDepth = 32
-
 	GenesisValidatorsRootSepolia = "0xd8ea171f3c94aea21ebc42a1ed61052acf3f9209c00e4efbaaddac09ed9b8078"
 	GenesisValidatorsRootGoerli  = "0x043db0d9a83813551ee2f33450d23797757d430911a9320530ad8a0eabc43efb"
 	GenesisValidatorsRootMainnet = "0x4b363db94e286120d76eb905340fdd4e54bfe9f06bf33ff6cf5ad27f511bfe95"

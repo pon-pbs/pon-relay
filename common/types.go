@@ -1,12 +1,10 @@
 package common
 
 import (
-	"database/sql"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
-	"time"
 
 	api "github.com/attestantio/go-builder-client/api"
 	capellaAPI "github.com/attestantio/go-builder-client/api/capella"
@@ -354,31 +352,6 @@ type BidTrace struct {
 	Value                U256Str   `json:"value" ssz-size:"32"`
 }
 
-type BuilderBlockSubmissionEntry struct {
-	ID         int64        `db:"id"`
-	InsertedAt time.Time    `db:"inserted_at"`
-	ReceivedAt sql.NullTime `db:"received_at"`
-
-	// BidTrace data
-	Signature string `db:"signature"`
-
-	Slot       uint64 `db:"slot"`
-	ParentHash string `db:"parent_hash"`
-	BlockHash  string `db:"block_hash"`
-
-	BuilderPubkey  string `db:"builder_pubkey"`
-	ProposerPubkey string `db:"proposer_pubkey"`
-
-	Value string `db:"value"`
-
-	// Helpers
-	Epoch       uint64 `db:"epoch"`
-	BlockNumber uint64 `db:"block_number"`
-
-	RPBS                  string `db:"rpbs"`
-	TransactionByteString string `db:"transactionByteString"`
-}
-
 type GetPayloadResponse struct {
 	Version   consensusspec.DataVersion `json:"version"`
 	Bellatrix *bellatrix.ExecutionPayload
@@ -390,6 +363,12 @@ type GetPayloadHeaderResponse struct {
 	Version consensusspec.DataVersion       `json:"version"`
 	Data    *capella.ExecutionPayloadHeader `json:"data"`
 	API     string                          `json:"api"`
+}
+
+type GetPayloadHeaderDelivered struct {
+	Slot              uint64
+	ProposerPubkeyHex string
+	Value             big.Int
 }
 
 type Address [20]byte
@@ -771,4 +750,9 @@ type RpbsCommitMessage struct {
 type RPBSChallenge struct {
 	Commitment RpbsCommitResponse    `json:"commitment"`
 	Challenge  RpbsChallengeResponse `json:"challenge"`
+}
+
+type ReporterSlot struct {
+	SlotLower uint64 `json:"slot_lower"`
+	SlotUpper uint64 `json:"slot_upper"`
 }

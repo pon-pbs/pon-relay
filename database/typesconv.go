@@ -23,21 +23,6 @@ func PayloadToExecPayloadEntry(payload *types.BuilderSubmitBlockRequest) (*Execu
 	}, nil
 }
 
-func DeliveredPayloadEntryToBidTraceV2JSON(payload *DeliveredPayloadEntry) common.BidTraceV2JSON {
-	return common.BidTraceV2JSON{
-		Slot:                 payload.Slot,
-		ParentHash:           payload.ParentHash,
-		BlockHash:            payload.BlockHash,
-		BuilderPubkey:        payload.BuilderPubkey,
-		ProposerPubkey:       payload.ProposerPubkey,
-		ProposerFeeRecipient: payload.ProposerFeeRecipient,
-		GasLimit:             payload.GasLimit,
-		GasUsed:              payload.GasUsed,
-		Value:                payload.Value,
-		BlockNumber:          payload.BlockNumber,
-	}
-}
-
 func BuilderSubmissionEntryToBidTraceV2WithTimestampJSON(payload *BuilderBlockSubmissionEntry) common.BidTraceV2WithTimestampJSON {
 	timestamp := payload.InsertedAt
 

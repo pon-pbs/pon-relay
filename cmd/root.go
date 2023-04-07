@@ -9,11 +9,11 @@ import (
 )
 
 var rootCmd = &cobra.Command{
-	Use:   "mev-boost-relay",
-	Short: "mev-boost-relay " + Version,
+	Use:   "pon-relay",
+	Short: "pon-relay " + Version,
 	Long:  `https://pon-relay.com`,
 	Run: func(cmd *cobra.Command, args []string) {
-		fmt.Printf("mev-boost-relay %s\n", Version)
+		fmt.Printf("pon-relay %s\n", Version)
 		_ = cmd.Help()
 	},
 }
