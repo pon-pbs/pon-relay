@@ -87,7 +87,7 @@ func (s *DatabaseService) Close() error {
 }
 
 func (s *DatabaseService) NumRegisteredValidators() (count uint64, err error) {
-	query := `SELECT COUNT(*) FROM (SELECT DISTINCT pubkey FROM ` + vars.TableValidatorRegistration + `) AS temp;`
+	query := `SELECT COUNT(*) FROM (SELECT DISTINCT validator_pubkey FROM ` + vars.TableValidators + `) AS temp;`
 	row := s.DB.QueryRow(query)
 	err = row.Scan(&count)
 	return count, err
@@ -99,24 +99,11 @@ func (s *DatabaseService) NumBuilders() (count uint64, err error) {
 	return count, err
 }
 
-func (s *DatabaseService) SaveValidatorRegistration(entry ValidatorRegistrationEntry) error {
-	query := `WITH latest_registration AS (
-		SELECT DISTINCT ON (pubkey) pubkey, fee_recipient, timestamp, gas_limit, signature FROM ` + vars.TableValidatorRegistration + ` WHERE pubkey=:pubkey ORDER BY pubkey, timestamp DESC limit 1
-	)
-	INSERT INTO ` + vars.TableValidatorRegistration + ` (pubkey, fee_recipient, timestamp, gas_limit, signature)
-	SELECT :pubkey, :fee_recipient, :timestamp, :gas_limit, :signature
-	WHERE NOT EXISTS (
-		SELECT 1 from latest_registration WHERE pubkey=:pubkey AND :timestamp <= latest_registration.timestamp OR (:fee_recipient = latest_registration.fee_recipient AND :gas_limit = latest_registration.gas_limit)
-	);`
-	_, err := s.DB.NamedExec(query, entry)
-	return err
-}
-
 func (s *DatabaseService) GetValidatorRegistrationsForPubkeys(pubkeys []string) (entries []*ValidatorRegistrationEntry, err error) {
-	query := `SELECT DISTINCT ON (pubkey) pubkey, fee_recipient, timestamp, gas_limit, signature
-		FROM ` + vars.TableValidatorRegistration + `
-		WHERE pubkey IN (?)
-		ORDER BY pubkey, timestamp DESC;`
+	query := `SELECT DISTINCT ON (validator_pubkey) validator_pubkey, status
+		FROM ` + vars.TableValidators + `
+		WHERE validator_pubkey IN (?)
+		ORDER BY validator_pubkey DESC;`
 
 	q, args, err := sqlx.In(query, pubkeys)
 	if err != nil {
@@ -124,18 +111,6 @@ func (s *DatabaseService) GetValidatorRegistrationsForPubkeys(pubkeys []string) 
 	}
 	err = s.DB.Select(&entries, s.DB.Rebind(q), args...)
 	return entries, err
-}
-
-func (s *DatabaseService) GetLatestValidatorRegistrations(timestampOnly bool) ([]*ValidatorRegistrationEntry, error) {
-	query := `SELECT DISTINCT ON (pubkey) pubkey, fee_recipient, timestamp, gas_limit, signature`
-	if timestampOnly {
-		query = `SELECT DISTINCT ON (pubkey) pubkey, timestamp`
-	}
-	query += ` FROM ` + vars.TableValidatorRegistration + ` ORDER BY pubkey, timestamp DESC;`
-
-	var registrations []*ValidatorRegistrationEntry
-	err := s.DB.Select(&registrations, query)
-	return registrations, err
 }
 
 func (s *DatabaseService) SaveBuilderBlockSubmission(payload *common.BuilderSubmitBlockRequest, RPBS *common.RpbsCommitResponse, transactionByte string) (err error) {
@@ -248,6 +223,24 @@ func (s *DatabaseService) SaveBuilder(entries []ponPool.Builder) error {
 	INSERT INTO ` + vars.TableBlockBuilder + ` (builder_pubkey, status)
 	VALUES (:builder_pubkey, :status) ON CONFLICT (builder_pubkey) 
 	DO UPDATE SET status = excluded.status`
+	_, err := s.DB.NamedExec(query, entries)
+	return err
+}
+
+func (s *DatabaseService) SaveValidators(entries []ponPool.Validator) error {
+	query := `
+	INSERT INTO ` + vars.TableValidators + ` (validator_pubkey, status, report_count)
+	VALUES (:validator_pubkey, :status, :report_count) ON CONFLICT (validator_pubkey) 
+	DO UPDATE SET status = excluded.status, report_count = excluded.report_count`
+	_, err := s.DB.NamedExec(query, entries)
+	return err
+}
+
+func (s *DatabaseService) SaveReporter(entries []ponPool.Reporter) error {
+	query := `
+	INSERT INTO ` + vars.TableReporters + ` (reporter_pubkey, active, report_count)
+	VALUES (:reporter_pubkey, :active, :report_count) ON CONFLICT (reporter_pubkey) 
+	DO UPDATE SET active = excluded.active, report_count = excluded.report_count`
 	_, err := s.DB.NamedExec(query, entries)
 	return err
 }

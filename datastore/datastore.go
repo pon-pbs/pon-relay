@@ -8,7 +8,6 @@ import (
 	relayCommon "pon-relay.com/common"
 
 	"github.com/flashbots/go-boost-utils/types"
-	"github.com/pkg/errors"
 	"github.com/sirupsen/logrus"
 	"pon-relay.com/database"
 )
@@ -93,22 +92,6 @@ func (ds *Datastore) NumRegisteredValidators() (uint64, error) {
 }
 
 // SaveValidatorRegistration saves a validator registration into both Redis and the database
-func (ds *Datastore) SaveValidatorRegistration(entry types.SignedValidatorRegistration) error {
-	// First save in the database
-	err := ds.db.SaveValidatorRegistration(database.SignedValidatorRegistrationToEntry(entry))
-	if err != nil {
-		return errors.Wrap(err, "failed saving validator registration to database")
-	}
-
-	// then save in redis
-	pk := types.NewPubkeyHex(entry.Message.Pubkey.String())
-	err = ds.redis.SetValidatorRegistrationTimestampIfNewer(pk, entry.Message.Timestamp)
-	if err != nil {
-		return errors.Wrap(err, "failed saving validator registration to redis")
-	}
-
-	return nil
-}
 
 // GetGetPayloadResponse returns the getPayload response from Redis
 func (ds *Datastore) GetGetPayloadResponse(slot uint64, proposerPubkey, blockHash string) (*types.GetPayloadResponse, error) {

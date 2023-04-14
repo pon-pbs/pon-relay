@@ -756,3 +756,8 @@ type ReporterSlot struct {
 	SlotLower uint64 `json:"slot_lower"`
 	SlotUpper uint64 `json:"slot_upper"`
 }
+
+type GetValidatorsResponseEntry struct {
+	Slot   uint64 `json:"slot,string"`
+	PubKey string `json:"pubKey"`
+}

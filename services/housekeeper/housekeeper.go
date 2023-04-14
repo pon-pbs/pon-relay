@@ -17,6 +17,8 @@ import (
 	"pon-relay.com/ponPool"
 )
 
+var validatorActive = "2"
+
 type HousekeeperOpts struct {
 	Log          *logrus.Entry
 	Redis        *datastore.RedisCache
@@ -40,6 +42,7 @@ type Housekeeper struct {
 	headSlot uberatomic.Uint64
 
 	proposersAlreadySaved map[string]bool // to avoid repeating redis writes
+	validatorsLast        map[string]string
 
 	ponPool *ponPool.PonRegistrySubgraph
 }
@@ -54,6 +57,7 @@ func NewHousekeeper(opts *HousekeeperOpts) *Housekeeper {
 		db:                    opts.DB,
 		beaconClient:          opts.BeaconClient,
 		proposersAlreadySaved: make(map[string]bool),
+		validatorsLast:        make(map[string]string),
 		ponPool:               opts.PonPool,
 	}
 
@@ -73,12 +77,11 @@ func (hk *Housekeeper) Start() (err error) {
 		return err
 	}
 
-	go hk.updateValidatorRegistrationsInRedis()
-
-	// Start the periodic task loops
+	go hk.periodicTaskUpdateValidator()
 	go hk.periodicTaskUpdateKnownValidators()
 	go hk.periodicTaskLogValidatorsBuilders()
 	go hk.periodicTaskUpdateBuilder()
+	go hk.periodicTaskUpdateReporter()
 
 	// Process the current slot
 	headSlot := bestSyncStatus.HeadSlot
@@ -100,13 +103,6 @@ func (hk *Housekeeper) periodicTaskLogValidatorsBuilders() {
 			hk.log.WithField("numRegisteredValidators", numRegisteredValidators).Infof("registered validators: %d", numRegisteredValidators)
 		} else {
 			hk.log.WithError(err).Error("failed to get number of registered validators")
-		}
-
-		activeValidators, err := hk.redis.GetActiveValidators()
-		if err == nil {
-			hk.log.WithField("numActiveValidators", len(activeValidators)).Infof("active validators: %d", len(activeValidators))
-		} else {
-			hk.log.WithError(err).Error("failed to get number of active validators")
 		}
 
 		numRegisteredBuilders, err := hk.db.NumBuilders()
@@ -133,6 +129,19 @@ func (hk *Housekeeper) periodicTaskUpdateKnownValidators() {
 func (hk *Housekeeper) periodicTaskUpdateBuilder() {
 	for {
 		hk.updateBlockBuilders()
+		time.Sleep(common.DurationPerEpoch)
+	}
+}
+func (hk *Housekeeper) periodicTaskUpdateValidator() {
+	for {
+		hk.updateValidatorRegistrations()
+		time.Sleep(common.DurationPerEpoch)
+	}
+}
+
+func (hk *Housekeeper) periodicTaskUpdateReporter() {
+	for {
+		hk.updateReporters()
 		time.Sleep(common.DurationPerEpoch)
 	}
 }
@@ -271,29 +280,23 @@ func (hk *Housekeeper) updateProposerDuties(headSlot uint64) {
 	}
 
 	// Convert db entries to signed validator registration type
-	signedValidatorRegistrations := make(map[string]*types.SignedValidatorRegistration)
+	PONValidators := make(map[string]string)
 	for _, regEntry := range validatorRegistrationEntries {
-		signedEntry, err := regEntry.ToSignedValidatorRegistration()
-		if err != nil {
-			log.WithError(err).Error("failed to convert validator registration entry to signed validator registration")
-			continue
-		}
-		signedValidatorRegistrations[regEntry.Pubkey] = signedEntry
+		PONValidators[regEntry.Pubkey] = regEntry.Status
 	}
 
 	// Prepare proposer duties
-	proposerDuties := []types.BuilderGetValidatorsResponseEntry{}
+	proposerDuties := []common.GetValidatorsResponseEntry{}
 	for _, duty := range entries {
-		reg := signedValidatorRegistrations[duty.Pubkey]
-		if reg != nil {
-			proposerDuties = append(proposerDuties, types.BuilderGetValidatorsResponseEntry{
-				Slot:  duty.Slot,
-				Entry: reg,
+		reg := PONValidators[duty.Pubkey]
+		if reg == validatorActive {
+			proposerDuties = append(proposerDuties, common.GetValidatorsResponseEntry{
+				Slot:   duty.Slot,
+				PubKey: duty.Pubkey,
 			})
 		}
 	}
 
-	// Save duties to Redis
 	err = hk.redis.SetProposerDuties(proposerDuties)
 	if err != nil {
 		log.WithError(err).Error("failed to set proposer duties")
@@ -310,25 +313,29 @@ func (hk *Housekeeper) updateProposerDuties(headSlot uint64) {
 	log.WithField("numDuties", len(_duties)).Infof("proposer duties updated: %s", strings.Join(_duties, ", "))
 }
 
-// updateValidatorRegistrationsInRedis saves all latest validator registrations from the database to Redis
-func (hk *Housekeeper) updateValidatorRegistrationsInRedis() {
-	regs, err := hk.db.GetLatestValidatorRegistrations(true)
+func (hk *Housekeeper) updateValidatorRegistrations() {
+	validators, err := hk.ponPool.GetValidators()
 	if err != nil {
-		hk.log.WithError(err).Error("failed to get latest validator registrations")
+		hk.log.WithError(err).Error("Failed To Get Validators")
 		return
 	}
 
-	hk.log.Infof("updating %d validator registrations in Redis...", len(regs))
-	timeStarted := time.Now()
-
-	for _, reg := range regs {
-		err = hk.redis.SetValidatorRegistrationTimestampIfNewer(types.PubkeyHex(reg.Pubkey), reg.Timestamp)
-		if err != nil {
-			hk.log.WithError(err).Error("failed to set validator registration")
+	hk.log.Infof("Updating %d Validators in Redis...", len(validators))
+	for _, validator := range validators {
+		if validator.Status == hk.validatorsLast[validator.ValidatorPubkey] {
 			continue
 		}
+		err = hk.redis.SetValidatorStatus(validator.ValidatorPubkey, validator.Status)
+		if err != nil {
+			hk.log.WithError(err).Error("failed to set block builder status in redis")
+		}
+		hk.validatorsLast[validator.ValidatorPubkey] = validator.Status
 	}
-	hk.log.Infof("updating %d validator registrations in Redis done - %f sec", len(regs), time.Since(timeStarted).Seconds())
+	hk.log.Infof("Updating %d Validators in Database...", len(validators))
+	err = hk.db.SaveValidators(validators)
+	if err != nil {
+		hk.log.WithError(err).Error("failed to save block Validators")
+	}
 }
 
 func (hk *Housekeeper) updateBlockBuilders() {
@@ -349,5 +356,18 @@ func (hk *Housekeeper) updateBlockBuilders() {
 	err = hk.db.SaveBuilder(builders)
 	if err != nil {
 		hk.log.WithError(err).Error("failed to save block builders")
+	}
+}
+
+func (hk *Housekeeper) updateReporters() {
+	reporters, err := hk.ponPool.GetReporters()
+	if err != nil {
+		hk.log.WithError(err).Error("Failed To Get Reporters")
+		return
+	}
+	hk.log.Infof("Updating %d Reporters in Database...", len(reporters))
+	err = hk.db.SaveReporter(reporters)
+	if err != nil {
+		hk.log.WithError(err).Error("failed to save reporters")
 	}
 }

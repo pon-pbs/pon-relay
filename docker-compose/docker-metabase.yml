@@ -1,0 +1,38 @@
+version: '3.1'
+
+volumes:
+  mb_data:
+    driver: local
+
+services:
+
+  db-metabase:
+    image: postgres
+    container_name: db-metabase
+    restart: always
+    volumes:
+      - 'mb_data:/var/lib/postgresql/data'
+    ports:
+      - '5431:5432'
+    environment: 
+      POSTGRES_USER: ${METABASE_DB_USER:-admin}
+      POSTGRES_PASSWORD: ${METABASE_DB_PASSWORD:-postgres}
+      POSTGRES_DB: metabase
+ 
+  metabase:
+    image: metabase/metabase
+    container_name: metabase
+    restart: always
+    environment:
+      MB_DB_TYPE: 'postgres'
+      MB_DB_DBNAME: metabase
+      MB_DB_PORT: 5432
+      MB_DB_USER: ${METABASE_DB_USER:-admin}
+      MB_DB_HOST: db-metabase
+      MB_DB_PASS: ${METABASE_DB_PASSWORD:-postgres}
+    ports:
+      - '1000:3000'
+    volumes:
+      - 'mb_data:/var/lib/metabase/data'
+    depends_on:
+      - 'db-metabase'

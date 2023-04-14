@@ -75,6 +75,7 @@ type RedisCache struct {
 	keyStats              string
 	keyProposerDuties     string
 	keyBlockBuilderStatus string
+	keyValidatorStatus    string
 }
 
 func NewRedisCache(redisURI, prefix string) (*RedisCache, error) {
@@ -102,6 +103,7 @@ func NewRedisCache(redisURI, prefix string) (*RedisCache, error) {
 		keyStats:              fmt.Sprintf("%s/%s:stats", redisPrefix, prefix),
 		keyProposerDuties:     fmt.Sprintf("%s/%s:proposer-duties", redisPrefix, prefix),
 		keyBlockBuilderStatus: fmt.Sprintf("%s/%s:block-builder-status", redisPrefix, prefix),
+		keyValidatorStatus:    fmt.Sprintf("%s/%s:validator-status", redisPrefix, prefix),
 	}, nil
 }
 
@@ -226,24 +228,6 @@ func (r *RedisCache) SetActiveValidator(pubkeyHex types.PubkeyHex) error {
 	return r.client.Expire(context.Background(), key, expiryActiveValidators).Err()
 }
 
-func (r *RedisCache) GetActiveValidators() (map[types.PubkeyHex]bool, error) {
-	hours := activeValidatorsHours
-	now := time.Now()
-	validators := make(map[types.PubkeyHex]bool)
-	for i := 0; i < hours; i++ {
-		key := r.keyActiveValidators(now.Add(time.Duration(-i) * time.Hour))
-		entries, err := r.client.HGetAll(context.Background(), key).Result()
-		if err != nil {
-			return nil, err
-		}
-		for pubkey := range entries {
-			validators[types.PubkeyHex(pubkey)] = true
-		}
-	}
-
-	return validators, nil
-}
-
 func (r *RedisCache) SetStats(field string, value any) (err error) {
 	return r.client.HSet(context.Background(), r.keyStats, field, value).Err()
 }
@@ -253,12 +237,12 @@ func (r *RedisCache) GetStats(field string) (value string, err error) {
 	return str, keyStats
 }
 
-func (r *RedisCache) SetProposerDuties(proposerDuties []types.BuilderGetValidatorsResponseEntry) (err error) {
+func (r *RedisCache) SetProposerDuties(proposerDuties []common.GetValidatorsResponseEntry) (err error) {
 	return r.SetObj(r.keyProposerDuties, proposerDuties, 0)
 }
 
-func (r *RedisCache) GetProposerDuties() (proposerDuties []types.BuilderGetValidatorsResponseEntry, err error) {
-	proposerDuties = make([]types.BuilderGetValidatorsResponseEntry, 0)
+func (r *RedisCache) GetProposerDuties() (proposerDuties []common.GetValidatorsResponseEntry, err error) {
+	proposerDuties = make([]common.GetValidatorsResponseEntry, 0)
 	err = r.GetObj(r.keyProposerDuties, &proposerDuties)
 	if errors.Is(err, redis.Nil) {
 		return proposerDuties, nil
@@ -333,6 +317,10 @@ func (r *RedisCache) GetBidTrace(slot uint64, proposerPubkey, blockHash string) 
 
 func (r *RedisCache) SetBlockBuilderStatus(builderPubkey string, status string) (err error) {
 	return r.client.HSet(context.Background(), r.keyBlockBuilderStatus, builderPubkey, string(status)).Err()
+}
+
+func (r *RedisCache) SetValidatorStatus(validatorPubkey string, status string) (err error) {
+	return r.client.HSet(context.Background(), r.keyValidatorStatus, validatorPubkey, string(status)).Err()
 }
 
 func (r *RedisCache) GetBlockBuilderStatus(builderPubkey string) (BuilderStatus bool, err error) {

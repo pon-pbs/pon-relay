@@ -137,8 +137,8 @@ type RelayAPI struct {
 	genesisInfo *beaconclient.GetGenesisResponse
 
 	proposerDutiesLock       sync.RWMutex
-	proposerDutiesResponse   []types.BuilderGetValidatorsResponseEntry
-	proposerDutiesMap        map[uint64]*types.RegisterValidatorRequestMessage
+	proposerDutiesResponse   []common.GetValidatorsResponseEntry
+	proposerDutiesMap        map[uint64]string
 	proposerDutiesSlot       uint64
 	isUpdatingProposerDuties uberatomic.Bool
 
@@ -210,7 +210,7 @@ func NewRelayAPI(opts RelayAPIOpts) (api *RelayAPI, err error) {
 		beaconClient:           opts.BeaconClient,
 		redis:                  opts.Redis,
 		db:                     opts.DB,
-		proposerDutiesResponse: []types.BuilderGetValidatorsResponseEntry{},
+		proposerDutiesResponse: []common.GetValidatorsResponseEntry{},
 		client:                 &http.Client{},
 		RPBS:                   common.NewRPBSService(rpbsServer, " "),
 
@@ -314,12 +314,6 @@ func (api *RelayAPI) StartServer() (err error) {
 		for i := 0; i < numActiveValidatorProcessors; i++ {
 			go api.startActiveValidatorProcessor()
 		}
-
-		// Start the validator registration db-save processor
-		api.log.Infof("starting %d validator registration processors", numValidatorRegProcessors)
-		for i := 0; i < numValidatorRegProcessors; i++ {
-			go api.startValidatorRegistrationDBProcessor()
-		}
 	}
 
 	// Process current slot
@@ -382,21 +376,6 @@ func (api *RelayAPI) startActiveValidatorProcessor() {
 	}
 }
 
-// startActiveValidatorProcessor keeps listening on the channel and saving active validators to redis
-func (api *RelayAPI) startValidatorRegistrationDBProcessor() {
-	for valReg := range api.validatorRegC {
-		err := api.datastore.SaveValidatorRegistration(valReg)
-		if err != nil {
-			api.log.WithError(err).WithFields(logrus.Fields{
-				"reg_pubkey":       valReg.Message.Pubkey,
-				"reg_feeRecipient": valReg.Message.FeeRecipient,
-				"reg_gasLimit":     valReg.Message.GasLimit,
-				"reg_timestamp":    valReg.Message.Timestamp,
-			}).Error("error saving validator registration")
-		}
-	}
-}
-
 func (api *RelayAPI) processNewSlot(headSlot uint64) {
 	_apiHeadSlot := api.headSlot.Load()
 	if headSlot <= _apiHeadSlot {
@@ -444,9 +423,9 @@ func (api *RelayAPI) updateProposerDuties(headSlot uint64) {
 
 	// Get duties from mem
 	duties, err := api.redis.GetProposerDuties()
-	dutiesMap := make(map[uint64]*types.RegisterValidatorRequestMessage)
+	dutiesMap := make(map[uint64]string)
 	for _, duty := range duties {
-		dutiesMap[duty.Slot] = duty.Entry.Message
+		dutiesMap[duty.Slot] = duty.PubKey
 	}
 
 	if err == nil {

@@ -4,8 +4,6 @@ import (
 	"database/sql"
 	"fmt"
 	"time"
-
-	"github.com/flashbots/go-boost-utils/types"
 )
 
 func NewNullInt64(i int64) sql.NullInt64 {
@@ -50,51 +48,8 @@ type GetBuilderSubmissionsFilters struct {
 }
 
 type ValidatorRegistrationEntry struct {
-	ID         int64     `db:"id"`
-	InsertedAt time.Time `db:"inserted_at"`
-
-	Pubkey       string `db:"pubkey"`
-	FeeRecipient string `db:"fee_recipient"`
-	Timestamp    uint64 `db:"timestamp"`
-	GasLimit     uint64 `db:"gas_limit"`
-	Signature    string `db:"signature"`
-}
-
-func (reg ValidatorRegistrationEntry) ToSignedValidatorRegistration() (*types.SignedValidatorRegistration, error) {
-	pubkey, err := types.HexToPubkey(reg.Pubkey)
-	if err != nil {
-		return nil, err
-	}
-
-	feeRec, err := types.HexToAddress(reg.FeeRecipient)
-	if err != nil {
-		return nil, err
-	}
-
-	sig, err := types.HexToSignature(reg.Signature)
-	if err != nil {
-		return nil, err
-	}
-
-	return &types.SignedValidatorRegistration{
-		Message: &types.RegisterValidatorRequestMessage{
-			Pubkey:       pubkey,
-			FeeRecipient: feeRec,
-			Timestamp:    reg.Timestamp,
-			GasLimit:     reg.GasLimit,
-		},
-		Signature: sig,
-	}, nil
-}
-
-func SignedValidatorRegistrationToEntry(valReg types.SignedValidatorRegistration) ValidatorRegistrationEntry {
-	return ValidatorRegistrationEntry{
-		Pubkey:       valReg.Message.Pubkey.String(),
-		FeeRecipient: valReg.Message.FeeRecipient.String(),
-		Timestamp:    valReg.Message.Timestamp,
-		GasLimit:     valReg.Message.GasLimit,
-		Signature:    valReg.Signature.String(),
-	}
+	Pubkey string `db:"validator_pubkey"`
+	Status string `db:"status"`
 }
 
 type ExecutionPayloadEntry struct {
