@@ -1,3 +1,6 @@
+## Deprecated
+This is an experimental repository and shouldn't be used in production. A new production-grade relay for PON is on the way built from the ground up and will be open to all.
+
 # Welcome To Proof Of Neutrality Relay
 The Proof of Neutrality Relay (PoN) is a decentralized, permissionless, and neutral middleware run by validators to participate in the market for block-building and exchange. The PoN relay was built by Blockswap Labs as a solution implementing the <a href="/pon/key-concepts" >Proposer-Builder Separation theory</a>
 (PBS) put forward by Vitalik Buterin.
